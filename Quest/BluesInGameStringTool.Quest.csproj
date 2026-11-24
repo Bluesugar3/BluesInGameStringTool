@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The game half for Quest (IL2CPP): dotnet build Quest -c Release -p:QuestReferences=<folder with the Quest game's Il2Cpp assemblies and MelonLoader 0.6.5> -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>BluesInGameStringTool.Quest</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <DebugType>none</DebugType>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <NoWarn>$(NoWarn);CS8600;CS8601;CS8602;CS8604;CS8625</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(QuestReferences)\*.dll" Private="false" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,3 @@
+<Project>
+  <!-- Stops the PC build settings above from applying to the Quest project. -->
+</Project>
