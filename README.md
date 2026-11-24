@@ -7,12 +7,12 @@ handles on handles, guards on guards, backpacks on weapons. No outside string to
 
 ## Modes
 
-The server owner picks one. Players only install the file.
+The server owner picks one for everyone and one for admins. Players only install the file.
 
 | Mode | What players can do |
 |---|---|
-| `Free` (default) | Any piece in any slot, several at the same spot. Anything with slots (handles, backpacks, bows, shield handles) plugs into anything else. |
-| `OpenSlots` | Only the pieces a slot is meant for, one per spot, but every spot at once: side pieces on both ends of a straight handle, big guards on both ends of a short handle. |
+| `Free` (admins by default) | Any piece in any slot, several at the same spot. Anything with slots (handles, backpacks, bows, shield handles) plugs into anything else. |
+| `OpenSlots` (everyone by default) | Only the pieces a slot is meant for, one per spot, but every spot at once: side pieces on both ends of a straight handle, big guards on both ends of a short handle. |
 | `Off` | The normal game. |
 
 ## How to build
@@ -27,7 +27,13 @@ Two finished builds held together never fuse. There is no way to take things apa
 
 1. Put `BluesInGameStringTool.dll` in the server's `Mods` folder and in every player's `Mods` folder.
 2. Start the server once. It writes `UserData\BluesInGameStringTool.cfg`.
-3. To change mode, set `Mode = "Free"`, `"OpenSlots"` or `"Off"` in that file and restart the server.
+3. Edit that file:
+
+| Setting | Default | |
+|---|---|---|
+| `Mode` | `"OpenSlots"` | Everyone's mode. Restart to change. |
+| `AdminMode` | `"Free"` | The mode of the players in `Admins`. Restart to change. |
+| `Admins` | `""` | Player names, comma separated, any capitals, e.g. `"Blue_XD, Friend"`. Takes effect within a few seconds, no restart. |
 
 ## Good to know
 

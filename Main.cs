@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Alta.Crafting;
 using Alta.Networking.Scripts.Player;
 using HarmonyLib;
@@ -9,7 +10,7 @@ using MelonLoader;
 using MelonLoader.Utils;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(BluesInGameStringTool.Main), "Blue's In-Game String Tool", "0.1.2", "Blue")]
+[assembly: MelonInfo(typeof(BluesInGameStringTool.Main), "Blue's In-Game String Tool", "0.2.0", "Blue")]
 [assembly: MelonGame("Alta", "A Township Tale")]
 
 // Lets players hand-build what normally needs a spawn string, by changing the answers to the game's own checks:
@@ -19,43 +20,40 @@ namespace BluesInGameStringTool {
     public enum Mode { Off, OpenSlots, Free }
 
     public class Main : MelonMod {
-        internal static Mode Mode;          // the server's setting; in a game, what the server said (Off until it says)
+        // In a game: what the server said (Off until it says). On the server: the mode of the player whose attach is being
+        // decided (Rules.During), else the wider of the two, which only matters while saved builds load (no checks then).
+        internal static Mode Mode;
         internal const float Spot = 0.1f;   // ponytail: slots closer than this (metres) are one spot. Game data: same spot up to 0.08, other end from 0.155. A setting if a modded handle needs it.
         internal static MelonLogger.Instance Log = null!;
         internal static bool Server => ApplicationManager.IsHeadless;   // not NetworkSceneManager.IsServer: a game's main menu sets that too
-        static readonly HashSet<uint> told = new HashSet<uint>();
+        static readonly Dictionary<uint, Mode> told = new Dictionary<uint, Mode>();
         static float nextTell;
         static IPlayer? lastPlayer;
 
-        // The server tells a game its mode in a blank player message, so a game without the mod shows nothing: 10 + mode spaces.
-        internal static bool IsSignal(string? text) => text != null && text.Length > 10 && text.Length <= 12 && text.Trim().Length == 0;
+        // The server tells a game its mode in a blank player message, so a game without the mod shows nothing: 11 + mode spaces.
+        internal static bool IsSignal(string? text) => text != null && text.Length >= 11 && text.Length <= 13 && text.Trim().Length == 0;
 
         public override void OnInitializeMelon() {
             Log = LoggerInstance;
-            if (Server) {
-                var file = MelonPreferences.CreateCategory("BluesInGameStringTool");
-                file.SetFilePath(System.IO.Path.Combine(MelonEnvironment.UserDataDirectory, "BluesInGameStringTool.cfg"), true, false);
-                string text = file.CreateEntry("Mode", "Free", description: "Free, OpenSlots or Off. Restart the server to change it.").Value;
-                file.SaveToFile(false);
-                if (!Enum.TryParse(text.Replace(" ", ""), true, out Mode) || !Enum.IsDefined(typeof(Mode), Mode)) {
-                    Mode = Mode.Off;
-                    Log.Warning($"Mode '{text}' is not Free, OpenSlots or Off: running as Off.");
-                }
-            }
-            Log.Msg($"{(Server ? $"server, mode {Mode}" : "game, the server sets the mode")}; {HarmonyInstance.GetPatchedMethods().Count()} game methods patched");
+            if (Server) Rules.Load();
+            Log.Msg($"{(Server ? $"server, everyone {Rules.Everyone}, admins {Rules.Admins}" : "game, the server sets the mode")}; {HarmonyInstance.GetPatchedMethods().Count()} game methods patched");
         }
 
         public override void OnUpdate() {
             if (Server) {
-                if (Mode == Mode.Off || Time.unscaledTime < nextTell || PlayerCommunicationManager.Instance == null) return;
+                if (Time.unscaledTime < nextTell || PlayerCommunicationManager.Instance == null) return;
                 nextTell = Time.unscaledTime + 1f;
+                Rules.ReloadAdmins();
                 var online = Player.AllPlayers.OfType<Player>().Where(p => p != null).ToList();
-                told.IntersectWith(online.Select(p => p.Identifier));   // a player who rejoins is a new one to tell
-                foreach (Player p in online)
-                    if (p.PlayerController != null && told.Add(p.Identifier)) {   // the game drops a message to a player with no body yet
-                        PlayerCommunicationManager.Instance.SendMessageToPlayer(p, new string(' ', 10 + (int)Mode), 0f);
-                        Log.Msg($"told {p.UserInfo?.Username}'s game: {Mode}");
-                    }
+                foreach (uint gone in told.Keys.Except(online.Select(p => p.Identifier)).ToList()) told.Remove(gone);   // a rejoin is told again
+                foreach (Player p in online) {
+                    Mode mode = Rules.For(p);
+                    // the game drops a message to a player with no body yet; a mode is told again only when it changes
+                    if (p.PlayerController == null || (told.TryGetValue(p.Identifier, out Mode was) && was == mode)) continue;
+                    told[p.Identifier] = mode;
+                    PlayerCommunicationManager.Instance.SendMessageToPlayer(p, new string(' ', 11 + (int)mode), 0f);
+                    Log.Msg($"told {p.UserInfo?.Username}'s game: {mode}");
+                }
                 return;
             }
             IPlayer? now = Player.Current;
@@ -103,9 +101,13 @@ namespace BluesInGameStringTool {
         static bool Prefix(CraftingPart __instance, JointSlot slot, bool isIgnoringPreConfirmation) {
             if (slot == null) return true;
             bool own = slot.CraftingPart?.GetTopLevel() == __instance;
-            if (Main.Server) Main.Log.Msg($"{__instance.name} -> {slot.name} on {slot.CraftingPart?.name}: fits {slot.Supports(__instance.Insert?.Type)}, free {slot.IsAvailable(isIgnoringPreConfirmation)}{(own ? ", refused: its own build" : "")}");
+            if (Main.Server) {
+                Main.Mode = Rules.During(__instance, out string who);
+                Main.Log.Msg($"{who} ({Main.Mode}): {__instance.name} -> {slot.name} on {slot.CraftingPart?.name}: fits {slot.Supports(__instance.Insert?.Type)}, free {slot.IsAvailable(isIgnoringPreConfirmation)}{(own ? ", refused: its own build" : "")}");
+            }
             return !own;
         }
+        static void Finalizer() { if (Main.Server) Main.Mode = Rules.Idle; }
     }
 
     // ---- a game hears the server's mode ----
@@ -114,7 +116,7 @@ namespace BluesInGameStringTool {
     static class HearMode {
         static void Postfix(ref PlayerTextMessage __instance, Alta.Serialization.Stream stream) {
             if (!stream.IsReading || Main.Server || !Main.IsSignal(__instance.Message)) return;
-            Main.Mode = (Mode)(__instance.Message.Length - 10);
+            Main.Mode = (Mode)(__instance.Message.Length - 11);
             foreach (JointSlot slot in Resources.FindObjectsOfTypeAll<JointSlot>())   // slots switched off before this game heard (the two short handles)
                 if (slot.gameObject.scene.IsValid()) slot.gameObject.SetActive(true);
             Main.Log.Msg($"server mode: {Main.Mode}");
@@ -203,4 +205,80 @@ namespace BluesInGameStringTool {
             return false;
         }
     }
+
+    // ---- Server: everyone gets one mode, the players on the admin list another ----
+    // The game's own admin rights live in Alta's web API, which these servers no longer reach, so admins are a list of names.
+    static class Rules {
+        internal static Mode Everyone, Admins;
+        internal static Mode Idle => (Mode)Math.Max((int)Everyone, (int)Admins);
+        static MelonPreferences_Category file = null!;
+        static MelonPreferences_Entry<string> adminList = null!;
+        static HashSet<string> names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        static string? lastList;
+        static float nextRead;
+        static readonly ConditionalWeakTable<CraftingPart, IPlayer> asker = new ConditionalWeakTable<CraftingPart, IPlayer>();
+
+        internal static void Load() {
+            file = MelonPreferences.CreateCategory("BluesInGameStringTool");
+            file.SetFilePath(System.IO.Path.Combine(MelonEnvironment.UserDataDirectory, "BluesInGameStringTool.cfg"), true, false);
+            Everyone = Parse(file.CreateEntry("Mode", "OpenSlots", description: "Everyone's mode: Free, OpenSlots or Off. Restart the server to change it.").Value, "Mode");
+            Admins = Parse(file.CreateEntry("AdminMode", "Free", description: "The mode of the players named in Admins. Restart the server to change it.").Value, "AdminMode");
+            adminList = file.CreateEntry("Admins", "", description: "Player names, separated by commas (any capitals). Read again within a few seconds of saving.");
+            file.SaveToFile(false);
+            Main.Mode = Idle;
+            Names();
+        }
+
+        static Mode Parse(string text, string key) {
+            if (Enum.TryParse(text.Replace(" ", ""), true, out Mode m) && Enum.IsDefined(typeof(Mode), m)) return m;
+            Main.Log.Warning($"{key} '{text}' is not Free, OpenSlots or Off: using Off.");
+            return Mode.Off;
+        }
+
+        // ponytail: re-reads the whole small file every 5 s; a file watcher if that ever shows in a profile.
+        internal static void ReloadAdmins() {
+            if (Time.unscaledTime < nextRead) return;
+            nextRead = Time.unscaledTime + 5f;
+            try { file.LoadFromFile(false); } catch (Exception e) { Main.Log.Warning($"could not read the settings file: {e.Message}"); }
+            Names();
+        }
+
+        static void Names() {
+            if (adminList.Value == lastList) return;
+            lastList = adminList.Value;
+            names = new HashSet<string>(lastList.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0), StringComparer.OrdinalIgnoreCase);
+            Main.Log.Msg($"admins ({Admins}): {(names.Count == 0 ? "nobody" : string.Join(", ", names))}");
+        }
+
+        internal static Mode For(Player p) => names.Contains(p.UserInfo?.Username ?? "") ? Admins : Everyone;
+
+        internal static void Asked(CraftingPart part, IPlayer player) {
+            if (player == null) return;
+            asker.Remove(part);
+            asker.Add(part, player);
+        }
+
+        // The mode of the player who asked for this piece's attach. Unknown (a world loading): Idle.
+        internal static Mode During(CraftingPart part, out string who) {
+            if (asker.TryGetValue(part, out IPlayer p) && p is Player player && player != null) {
+                who = player.UserInfo?.Username ?? "?";
+                return For(player);
+            }
+            who = "nobody";
+            return Idle;
+        }
+    }
+
+    // Who asked: the plain attach request, and the bag machine's nailed attach (it completes later, when the nails are in).
+    [HarmonyPatch(typeof(CraftingPart), "AttemptCraft", typeof(IPlayer), typeof(Alta.Serialization.Stream), typeof(uint))]
+    static class AskedToAttach {
+        static void Prefix(CraftingPart __instance, IPlayer player) {   // the plug's own check comes first, so the whole request runs in their mode
+            Rules.Asked(__instance, player);
+            if (Main.Server) Main.Mode = Rules.During(__instance, out _);
+        }
+        static void Finalizer() { if (Main.Server) Main.Mode = Rules.Idle; }
+    }
+
+    [HarmonyPatch(typeof(ConfirmationCraftingPart), "SyncAttemptCraft")]
+    static class AskedToNail { static void Prefix(CraftingPart __instance, IPlayer player) => Rules.Asked(__instance, player); }
 }
