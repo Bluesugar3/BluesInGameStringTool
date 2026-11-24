@@ -25,7 +25,7 @@ Two finished builds held together never fuse. There is no way to take things apa
 
 ## Install
 
-1. Put `BluesInGameStringTool.dll` in the server's `Mods` folder and in every player's `Mods` folder.
+1. Put `BluesInGameStringTool.dll` in the server's `Mods` folder and in every PC player's `Mods` folder. Quest players (Modding Tavern's patched game) put `BluesInGameStringTool.Quest.dll` in the headset's `Mods` folder instead.
 2. Start the server once. It writes `UserData\BluesInGameStringTool.cfg`.
 3. Edit that file:
 
