@@ -10,7 +10,7 @@ using MelonLoader;
 using MelonLoader.Utils;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(BluesInGameStringTool.Main), "Blue's In-Game String Tool", "0.2.0", "Blue")]
+[assembly: MelonInfo(typeof(BluesInGameStringTool.Main), "Blue's In-Game String Tool", "0.2.1", "Blue")]
 [assembly: MelonGame("Alta", "A Township Tale")]
 
 // Lets players hand-build what normally needs a spawn string, by changing the answers to the game's own checks:
@@ -30,8 +30,8 @@ namespace BluesInGameStringTool {
         static float nextTell;
         static IPlayer? lastPlayer;
 
-        // The server tells a game its mode in a blank player message, so a game without the mod shows nothing: 11 + mode spaces.
-        internal static bool IsSignal(string? text) => text != null && text.Length >= 11 && text.Length <= 13 && text.Trim().Length == 0;
+        // The server tells a game its mode in a blank player message, so a game without the mod shows nothing: 14 + mode spaces (0.1.x read 11-12 spaces, so they never mistake it).
+        internal static bool IsSignal(string? text) => text != null && text.Length >= 14 && text.Length <= 16 && text.Trim().Length == 0;
 
         public override void OnInitializeMelon() {
             Log = LoggerInstance;
@@ -51,7 +51,7 @@ namespace BluesInGameStringTool {
                     // the game drops a message to a player with no body yet; a mode is told again only when it changes
                     if (p.PlayerController == null || (told.TryGetValue(p.Identifier, out Mode was) && was == mode)) continue;
                     told[p.Identifier] = mode;
-                    PlayerCommunicationManager.Instance.SendMessageToPlayer(p, new string(' ', 11 + (int)mode), 0f);
+                    PlayerCommunicationManager.Instance.SendMessageToPlayer(p, new string(' ', 14 + (int)mode), 0f);
                     Log.Msg($"told {p.UserInfo?.Username}'s game: {mode}");
                 }
                 return;
@@ -116,7 +116,7 @@ namespace BluesInGameStringTool {
     static class HearMode {
         static void Postfix(ref PlayerTextMessage __instance, Alta.Serialization.Stream stream) {
             if (!stream.IsReading || Main.Server || !Main.IsSignal(__instance.Message)) return;
-            Main.Mode = (Mode)(__instance.Message.Length - 11);
+            Main.Mode = (Mode)(__instance.Message.Length - 14);
             foreach (JointSlot slot in Resources.FindObjectsOfTypeAll<JointSlot>())   // slots switched off before this game heard (the two short handles)
                 if (slot.gameObject.scene.IsValid()) slot.gameObject.SetActive(true);
             Main.Log.Msg($"server mode: {Main.Mode}");
