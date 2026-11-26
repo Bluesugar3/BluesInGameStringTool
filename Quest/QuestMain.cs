@@ -7,7 +7,7 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(BluesUnrestrictedCrafting.Main), "Blue's Unrestricted Crafting", "0.4.0", "Blue")]
+[assembly: MelonInfo(typeof(BluesUnrestrictedCrafting.Main), "Blue's Unrestricted Crafting", "0.4.1", "Blue")]
 [assembly: MelonGame("Alta", "Att_Quest")]
 [assembly: HarmonyDontPatchAll]
 
@@ -128,6 +128,7 @@ namespace BluesUnrestrictedCrafting {
     [HarmonyPatch(typeof(JointSlot), nameof(JointSlot.CalculateConnectedRotation))]
     static class PlugFacesOut {
         static void Postfix(JointSlot __instance, CraftingPart insertPart, ref Quaternion __result) {
+            Trace.Step($"attaching {insertPart.name} to {__instance.name}");
             Transform plug = insertPart.Insert.transform;
             if (plug.GetComponent<JointSlot>() != null)
                 __result = __instance.transform.rotation * Quaternion.Euler(180f, 0f, 0f) * Quaternion.Inverse(plug.rotation) * insertPart.transform.rotation;
@@ -144,18 +145,35 @@ namespace BluesUnrestrictedCrafting {
             CraftingPart host = plug.Pointer == primaryCraftingPart.Pointer ? secondaryCraftingPart : primaryCraftingPart;
             if (Main.Mode != Mode.Free || plug.Pointer == host.Pointer || !CanPlug(plug) || !IsLooseBase(host)
                 || plug.PotentialConnection != null || host.PotentialConnection != null) return true;
+            Trace.Step($"plugging {plug.name} into {host.name}");
             new CraftingOptions(player, plug, host);
             __result = true;
             return false;
         }
     }
 
-    [HarmonyPatch(typeof(CraftingOptions), nameof(CraftingOptions.Cancel))]
+    // Letting go of either hand attaches. On PC this is a prefix on CraftingOptions.Cancel, but Cancel is one call long: on Quest a
+    // patch's jump is bigger than its native code, overwrites the code beside it and the game dies when you let go (the archery port's
+    // "never patch an empty game method"). So it hangs on Destroy, which Cancel calls: when the slot's side was let go while the plug
+    // is still held, it attaches (RequestCraft) instead of cancelling.
+    [HarmonyPatch(typeof(CraftingOptions), nameof(CraftingOptions.Destroy))]
     static class EitherHandAttaches {
-        static bool Prefix(CraftingOptions __instance, Interactable dropped, Interactor interactor) {
-            if (Main.Mode != Mode.Free || __instance.insert == null || __instance.insert.GetComponent<JointSlot>() == null) return true;
-            __instance.AttemptCraft(dropped, interactor);
+        static bool busy;   // RequestCraft calls Destroy itself
+        static bool Prefix(CraftingOptions __instance) {
+            if (busy || Main.Mode != Mode.Free || __instance.insert == null || __instance.insert.GetComponent<JointSlot>() == null
+                || __instance.insertPart?.Pickup == null || __instance.slotPart?.Pickup == null
+                || !__instance.insertPart.Pickup.IsInteractedWith || __instance.slotPart.Pickup.IsInteractedWith) return true;
+            Trace.Step("let go of the slot side: attaching");
+            busy = true;
+            try { __instance.RequestCraft(null, null); }
+            catch (Exception e) { MelonLogger.Warning($"attach on letting go failed: {e.Message}"); }
+            finally { busy = false; }
             return false;
         }
+    }
+
+    // A native crash leaves no stack trace: the last of these lines in the log says where it was.
+    static class Trace {
+        internal static void Step(string what) => MelonLogger.Msg($"step: {what}");
     }
 }
