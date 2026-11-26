@@ -7,7 +7,7 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(BluesInGameStringTool.Main), "Blue's In-Game String Tool", "0.2.1", "Blue")]
+[assembly: MelonInfo(typeof(BluesInGameStringTool.Main), "Blue's In-Game String Tool", "0.3.0", "Blue")]
 [assembly: MelonGame("Alta", "Att_Quest")]
 [assembly: HarmonyDontPatchAll]
 
