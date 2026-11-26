@@ -7,7 +7,7 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(BluesInGameStringTool.Main), "Blue's In-Game String Tool", "0.3.0", "Blue")]
+[assembly: MelonInfo(typeof(BluesUnrestrictedCrafting.Main), "Blue's Unrestricted Crafting", "0.4.0", "Blue")]
 [assembly: MelonGame("Alta", "Att_Quest")]
 [assembly: HarmonyDontPatchAll]
 
@@ -15,7 +15,7 @@ using UnityEngine;
 // server decides every attach, so nothing of the server's half is here. Same rules, IL2CPP spelling: private game fields are public
 // members, `is` on a game object is TryCast, a delegate handed to the game is converted and kept, the struct method
 // PlayerTextMessage.Serialize cannot be patched (the mode is read where the game shows the message instead).
-namespace BluesInGameStringTool {
+namespace BluesUnrestrictedCrafting {
     public enum Mode { Off, OpenSlots, Free }
 
     public class Main : MelonMod {

@@ -2,7 +2,7 @@
   <!-- The game half for Quest (IL2CPP): dotnet build Quest -c Release -p:QuestReferences=<folder with the Quest game's Il2Cpp assemblies and MelonLoader 0.6.5> -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <AssemblyName>BluesInGameStringTool.Quest</AssemblyName>
+    <AssemblyName>BluesUnrestrictedCrafting.Quest</AssemblyName>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>

@@ -10,13 +10,13 @@ using MelonLoader;
 using MelonLoader.Utils;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(BluesInGameStringTool.Main), "Blue's In-Game String Tool", "0.3.0", "Blue")]
+[assembly: MelonInfo(typeof(BluesUnrestrictedCrafting.Main), "Blue's Unrestricted Crafting", "0.4.0", "Blue")]
 [assembly: MelonGame("Alta", "A Township Tale")]
 
 // Lets players hand-build what normally needs a spawn string, by changing the answers to the game's own checks:
 // "does this piece fit this slot" (JointSlot.Supports) and "is this slot free" (JointPoint.IsAvailable).
 // The server checks every attach itself, so the mode a game hears only decides which slots it lights up. See DESIGN.md.
-namespace BluesInGameStringTool {
+namespace BluesUnrestrictedCrafting {
     public enum Mode { Off, OpenSlots, Free }
 
     public class Main : MelonMod {
@@ -38,7 +38,7 @@ namespace BluesInGameStringTool {
             if (Server) {
                 Rules.Load();
                 try { Alta.Console.CommandService.CommandCollection.ProcessModule(typeof(Commands), typeof(Commands).Assembly); }
-                catch (Exception e) { Log.Warning($"the stringtool console commands could not be added: {e.Message}"); }
+                catch (Exception e) { Log.Warning($"the unrestricted console commands could not be added: {e.Message}"); }
             }
             Log.Msg($"{(Server ? $"server, everyone {Rules.Everyone}, admins {Rules.Admins}" : "game, the server sets the mode")}; {HarmonyInstance.GetPatchedMethods().Count()} game methods patched");
         }
@@ -223,8 +223,15 @@ namespace BluesInGameStringTool {
         static readonly ConditionalWeakTable<CraftingPart, IPlayer> asker = new ConditionalWeakTable<CraftingPart, IPlayer>();
 
         internal static void Load() {
-            file = MelonPreferences.CreateCategory("BluesInGameStringTool");
-            file.SetFilePath(System.IO.Path.Combine(MelonEnvironment.UserDataDirectory, "BluesInGameStringTool.cfg"), true, false);
+            // Renamed from Blue's In-Game String Tool (0.3.0): its settings, admin list included, are copied once, never moved.
+            string dir = MelonEnvironment.UserDataDirectory, cfg = System.IO.Path.Combine(dir, "BluesUnrestrictedCrafting.cfg"),
+                oldCfg = System.IO.Path.Combine(dir, "BluesInGameStringTool.cfg");
+            if (!System.IO.File.Exists(cfg) && System.IO.File.Exists(oldCfg)) {
+                System.IO.File.WriteAllText(cfg, System.IO.File.ReadAllText(oldCfg).Replace("[BluesInGameStringTool]", "[BluesUnrestrictedCrafting]"));
+                Main.Log.Msg("settings copied from BluesInGameStringTool.cfg");
+            }
+            file = MelonPreferences.CreateCategory("BluesUnrestrictedCrafting");
+            file.SetFilePath(cfg, true, false);
             Everyone = Parse(file.CreateEntry("Mode", "OpenSlots", description: "Everyone's mode: Free, OpenSlots or Off. Restart the server to change it.").Value, "Mode");
             Admins = Parse(file.CreateEntry("AdminMode", "Free", description: "The mode of the players named in Admins. Restart the server to change it.").Value, "AdminMode");
             adminList = file.CreateEntry("Admins", "", description: "Player names, separated by commas (any capitals). Read again within a few seconds of saving.");
@@ -261,7 +268,7 @@ namespace BluesInGameStringTool {
         // The console's give and take: the same list, written back to the file (players are told within a second).
         internal static string Set(string name, bool admin) {
             name = name.Trim().Trim('"');
-            if (name.Length == 0 || name.Contains(',')) return "Give a player name: stringtool give <name> / stringtool take <name>";
+            if (name.Length == 0 || name.Contains(',')) return "Give a player name: unrestricted give <name> / unrestricted take <name>";
             if (admin == names.Contains(name)) return $"{name} {(admin ? "already has" : "does not have")} {Admins}.";
             var next = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
             if (admin) next.Add(name); else next.Remove(name);
@@ -303,15 +310,15 @@ namespace BluesInGameStringTool {
 
     // Server console (the TavernLauncher Server window's Console, or the remote console with the owner's token): TavernLib switches the
     // game's in-game console off and has no permission list, so this is where admins are given.
-    [Alta.Console.PlayOnly, Alta.Console.ServerOnly, Alta.Console.Module("stringtool", "Blue's In-Game String Tool: who has the admin mode, give, take")]
+    [Alta.Console.PlayOnly, Alta.Console.ServerOnly, Alta.Console.Module("unrestricted", "Blue's Unrestricted Crafting: who has the admin mode, give, take")]
     static class Commands {
         [Alta.Console.Command(null, "Who has the admin mode")]
         static string Status() => $"Everyone: {Rules.Everyone}. Admins ({Rules.Admins}): {(Rules.Listed.Any() ? string.Join(", ", Rules.Listed) : "nobody")}.";
 
-        [Alta.Console.Command("give", "Gives a player the admin mode: stringtool give <name>")]
+        [Alta.Console.Command("give", "Gives a player the admin mode: unrestricted give <name>")]
         static string Give(string name = "") => Rules.Set(name, true);
 
-        [Alta.Console.Command("take", "Takes the admin mode from a player: stringtool take <name>")]
+        [Alta.Console.Command("take", "Takes the admin mode from a player: unrestricted take <name>")]
         static string Take(string name = "") => Rules.Set(name, false);
     }
 }

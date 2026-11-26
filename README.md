@@ -1,4 +1,4 @@
-# Blue's In-Game String Tool
+# Blue's Unrestricted Crafting
 
 A MelonLoader mod for A Township Tale. Build "string" items by hand in the game: pieces in slots the game normally refuses,
 handles on handles, guards on guards, backpacks on weapons. No outside string tool, no spawn command.
@@ -25,8 +25,8 @@ Two finished builds held together never fuse. There is no way to take things apa
 
 ## Install
 
-1. Put `BluesInGameStringTool.dll` in the server's `Mods` folder and in every PC player's `Mods` folder. Quest players (Modding Tavern's patched game) put `BluesInGameStringTool.Quest.dll` in the headset's `Mods` folder instead.
-2. Start the server once. It writes `UserData\BluesInGameStringTool.cfg`.
+1. Put `BluesUnrestrictedCrafting.dll` in the server's `Mods` folder and in every PC player's `Mods` folder. Quest players (Modding Tavern's patched game) put `BluesUnrestrictedCrafting.Quest.dll` in the headset's `Mods` folder instead.
+2. Start the server once. It writes `UserData\BluesUnrestrictedCrafting.cfg`.
 3. Edit that file:
 
 | Setting | Default | |
@@ -39,9 +39,9 @@ Or from the server console (TavernLauncher's Server window, or a remote console 
 
 | Command | Does |
 |---|---|
-| `stringtool` | Lists who has the admin mode. |
-| `stringtool give <name>` | Gives a player the admin mode. |
-| `stringtool take <name>` | Takes it away. |
+| `unrestricted` | Lists who has the admin mode. |
+| `unrestricted give <name>` | Gives a player the admin mode. |
+| `unrestricted take <name>` | Takes it away. |
 
 ## Good to know
 
