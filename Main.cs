@@ -10,20 +10,20 @@ using MelonLoader;
 using MelonLoader.Utils;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(BluesUnrestrictedCrafting.Main), "Blue's Unrestricted Crafting", "0.4.0", "Blue")]
+[assembly: MelonInfo(typeof(BluesUnrestrictedCrafting.Main), "Blue's Unrestricted Crafting", "1.0.0", "Blue")]
 [assembly: MelonGame("Alta", "A Township Tale")]
 
 // Lets players hand-build what normally needs a spawn string, by changing the answers to the game's own checks:
 // "does this piece fit this slot" (JointSlot.Supports) and "is this slot free" (JointPoint.IsAvailable).
-// The server checks every attach itself, so the mode a game hears only decides which slots it lights up. See DESIGN.md.
+// Only the players on the server's admin list get it (Free); everyone else plays the normal game (Off). The server checks
+// every attach itself, so the mode a game hears only decides which slots it lights up.
 namespace BluesUnrestrictedCrafting {
-    public enum Mode { Off, OpenSlots, Free }
+    public enum Mode { Off = 0, Free = 2 }   // 2: the message length Free has had since 0.2.1 (1 was the removed OpenSlots)
 
     public class Main : MelonMod {
         // In a game: what the server said (Off until it says). On the server: the mode of the player whose attach is being
-        // decided (Rules.During), else the wider of the two, which only matters while saved builds load (no checks then).
+        // decided (Rules.During), else Free, which only matters while saved builds load (no checks then).
         internal static Mode Mode;
-        internal const float Spot = 0.1f;   // ponytail: slots closer than this (metres) are one spot. Game data: same spot up to 0.08, other end from 0.155. A setting if a modded handle needs it.
         internal static MelonLogger.Instance Log = null!;
         internal static bool Server => ApplicationManager.IsHeadless;   // not NetworkSceneManager.IsServer: a game's main menu sets that too
         static readonly Dictionary<uint, Mode> told = new Dictionary<uint, Mode>();
@@ -40,7 +40,7 @@ namespace BluesUnrestrictedCrafting {
                 try { Alta.Console.CommandService.CommandCollection.ProcessModule(typeof(Commands), typeof(Commands).Assembly); }
                 catch (Exception e) { Log.Warning($"the unrestricted console commands could not be added: {e.Message}"); }
             }
-            Log.Msg($"{(Server ? $"server, everyone {Rules.Everyone}, admins {Rules.Admins}" : "game, the server sets the mode")}; {HarmonyInstance.GetPatchedMethods().Count()} game methods patched");
+            Log.Msg($"{(Server ? "server, Free for the admin list, the normal game for everyone else" : "game, the server sets the mode")}; {HarmonyInstance.GetPatchedMethods().Count()} game methods patched");
         }
 
         public override void OnUpdate() {
@@ -67,7 +67,7 @@ namespace BluesUnrestrictedCrafting {
         }
     }
 
-    // ---- the two modes ----
+    // ---- Free ----
 
     [HarmonyPatch(typeof(JointSlot), nameof(JointSlot.Supports))]
     static class AnyPieceFits {
@@ -75,7 +75,6 @@ namespace BluesUnrestrictedCrafting {
     }
 
     // The game says no for a free slot only through its slot groups ("one of these"). Free: every free slot is open.
-    // OpenSlots: open unless a used slot of the same piece shares its spot, which keeps one piece per spot and drops "only one end".
     [HarmonyPatch(typeof(JointPoint), nameof(JointPoint.IsAvailable))]
     static class EverySlotOpen {
         static void Postfix(JointPoint __instance, bool isIgnoringPreConfirmation, ref bool __result) {
@@ -85,8 +84,7 @@ namespace BluesUnrestrictedCrafting {
             }
             if (__result || Main.Mode == Mode.Off || !(__instance is JointSlot slot) || slot.IsUsed || slot.IsConnected
                 || (slot.IsPreConfirmationConnected && !isIgnoringPreConfirmation) || !slot.gameObject.activeInHierarchy) return;
-            __result = Main.Mode == Mode.Free || slot.CraftingPart?.Slots.Any(other => other.IsUsed
-                && (other.transform.position - slot.transform.position).sqrMagnitude < Main.Spot * Main.Spot) == false;
+            __result = Main.Mode == Mode.Free;
         }
     }
 
@@ -120,7 +118,7 @@ namespace BluesUnrestrictedCrafting {
     static class HearMode {
         static void Postfix(ref PlayerTextMessage __instance, Alta.Serialization.Stream stream) {
             if (!stream.IsReading || Main.Server || !Main.IsSignal(__instance.Message)) return;
-            Main.Mode = (Mode)(__instance.Message.Length - 14);
+            Main.Mode = __instance.Message.Length == 16 ? Mode.Free : Mode.Off;
             foreach (JointSlot slot in Resources.FindObjectsOfTypeAll<JointSlot>())   // slots switched off before this game heard (the two short handles)
                 if (slot.gameObject.scene.IsValid()) slot.gameObject.SetActive(true);
             Main.Log.Msg($"server mode: {Main.Mode}");
@@ -210,11 +208,10 @@ namespace BluesUnrestrictedCrafting {
         }
     }
 
-    // ---- Server: everyone gets one mode, the players on the admin list another ----
+    // ---- Server: the players on the admin list get Free, everyone else the normal game ----
     // The game's own admin rights live in Alta's web API, which these servers no longer reach, so admins are a list of names.
     static class Rules {
-        internal static Mode Everyone, Admins;
-        internal static Mode Idle => (Mode)Math.Max((int)Everyone, (int)Admins);
+        internal const Mode Idle = Mode.Free;
         static MelonPreferences_Category file = null!;
         static MelonPreferences_Entry<string> adminList = null!;
         static HashSet<string> names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -232,18 +229,10 @@ namespace BluesUnrestrictedCrafting {
             }
             file = MelonPreferences.CreateCategory("BluesUnrestrictedCrafting");
             file.SetFilePath(cfg, true, false);
-            Everyone = Parse(file.CreateEntry("Mode", "OpenSlots", description: "Everyone's mode: Free, OpenSlots or Off. Restart the server to change it.").Value, "Mode");
-            Admins = Parse(file.CreateEntry("AdminMode", "Free", description: "The mode of the players named in Admins. Restart the server to change it.").Value, "AdminMode");
-            adminList = file.CreateEntry("Admins", "", description: "Player names, separated by commas (any capitals). Read again within a few seconds of saving.");
+            adminList = file.CreateEntry("Admins", "", description: "The players who may craft without limits: names, separated by commas (any capitals). Read again within a few seconds of saving, or use the console: unrestricted give <name>.");
             file.SaveToFile(false);
             Main.Mode = Idle;
             Names();
-        }
-
-        static Mode Parse(string text, string key) {
-            if (Enum.TryParse(text.Replace(" ", ""), true, out Mode m) && Enum.IsDefined(typeof(Mode), m)) return m;
-            Main.Log.Warning($"{key} '{text}' is not Free, OpenSlots or Off: using Off.");
-            return Mode.Off;
         }
 
         // ponytail: re-reads the whole small file every 5 s; a file watcher if that ever shows in a profile.
@@ -258,10 +247,10 @@ namespace BluesUnrestrictedCrafting {
             if (adminList.Value == lastList) return;
             lastList = adminList.Value;
             names = new HashSet<string>(lastList.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0), StringComparer.OrdinalIgnoreCase);
-            Main.Log.Msg($"admins ({Admins}): {(names.Count == 0 ? "nobody" : string.Join(", ", names))}");
+            Main.Log.Msg($"admins: {(names.Count == 0 ? "nobody" : string.Join(", ", names))}");
         }
 
-        internal static Mode For(Player p) => names.Contains(p.UserInfo?.Username ?? "") ? Admins : Everyone;
+        internal static Mode For(Player p) => names.Contains(p.UserInfo?.Username ?? "") ? Mode.Free : Mode.Off;
 
         internal static IEnumerable<string> Listed => names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
 
@@ -269,13 +258,13 @@ namespace BluesUnrestrictedCrafting {
         internal static string Set(string name, bool admin) {
             name = name.Trim().Trim('"');
             if (name.Length == 0 || name.Contains(',')) return "Give a player name: unrestricted give <name> / unrestricted take <name>";
-            if (admin == names.Contains(name)) return $"{name} {(admin ? "already has" : "does not have")} {Admins}.";
+            if (admin == names.Contains(name)) return $"{name} {(admin ? "already has" : "does not have")} unrestricted crafting.";
             var next = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
             if (admin) next.Add(name); else next.Remove(name);
             adminList.Value = string.Join(", ", next.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
             file.SaveToFile(false);
             Names();
-            return $"{name} {(admin ? "now has" : "no longer has")} {Admins} (everyone else: {Everyone}).";
+            return $"{name} {(admin ? "now has" : "no longer has")} unrestricted crafting.";
         }
 
         internal static void Asked(CraftingPart part, IPlayer player) {
@@ -310,15 +299,15 @@ namespace BluesUnrestrictedCrafting {
 
     // Server console (the TavernLauncher Server window's Console, or the remote console with the owner's token): TavernLib switches the
     // game's in-game console off and has no permission list, so this is where admins are given.
-    [Alta.Console.PlayOnly, Alta.Console.ServerOnly, Alta.Console.Module("unrestricted", "Blue's Unrestricted Crafting: who has the admin mode, give, take")]
+    [Alta.Console.PlayOnly, Alta.Console.ServerOnly, Alta.Console.Module("unrestricted", "Blue's Unrestricted Crafting: who may craft without limits, give, take")]
     static class Commands {
-        [Alta.Console.Command(null, "Who has the admin mode")]
-        static string Status() => $"Everyone: {Rules.Everyone}. Admins ({Rules.Admins}): {(Rules.Listed.Any() ? string.Join(", ", Rules.Listed) : "nobody")}.";
+        [Alta.Console.Command(null, "Who may craft without limits")]
+        static string Status() => $"Unrestricted crafting: {(Rules.Listed.Any() ? string.Join(", ", Rules.Listed) : "nobody")}. Everyone else: the normal game.";
 
-        [Alta.Console.Command("give", "Gives a player the admin mode: unrestricted give <name>")]
+        [Alta.Console.Command("give", "Lets a player craft without limits: unrestricted give <name>")]
         static string Give(string name = "") => Rules.Set(name, true);
 
-        [Alta.Console.Command("take", "Takes the admin mode from a player: unrestricted take <name>")]
+        [Alta.Console.Command("take", "Puts a player back on the normal game: unrestricted take <name>")]
         static string Take(string name = "") => Rules.Set(name, false);
     }
 }

@@ -7,7 +7,7 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(BluesUnrestrictedCrafting.Main), "Blue's Unrestricted Crafting", "0.4.1", "Blue")]
+[assembly: MelonInfo(typeof(BluesUnrestrictedCrafting.Main), "Blue's Unrestricted Crafting", "1.0.0", "Blue")]
 [assembly: MelonGame("Alta", "Att_Quest")]
 [assembly: HarmonyDontPatchAll]
 
@@ -16,11 +16,10 @@ using UnityEngine;
 // members, `is` on a game object is TryCast, a delegate handed to the game is converted and kept, the struct method
 // PlayerTextMessage.Serialize cannot be patched (the mode is read where the game shows the message instead).
 namespace BluesUnrestrictedCrafting {
-    public enum Mode { Off, OpenSlots, Free }
+    public enum Mode { Off = 0, Free = 2 }
 
     public class Main : MelonMod {
         internal static Mode Mode;   // what the server said (Off until it says)
-        internal const float Spot = 0.1f;
         static IntPtr lastPlayer;
 
         // The server's blank message: 14 + mode spaces (see ..\Main.cs).
@@ -60,11 +59,6 @@ namespace BluesUnrestrictedCrafting {
             JointSlot slot = __instance.TryCast<JointSlot>();
             if (__result || Main.Mode == Mode.Off || slot == null || slot.IsUsed || slot.IsConnected
                 || (slot.IsPreConfirmationConnected && !isIgnoringPreConfirmation) || !slot.gameObject.activeInHierarchy) return;
-            if (Main.Mode == Mode.Free) { __result = true; return; }
-            CraftingPart part = slot.CraftingPart;
-            if (part == null) return;
-            foreach (JointSlot other in part.Slots)
-                if (other != null && other.IsUsed && (other.transform.position - slot.transform.position).sqrMagnitude < Main.Spot * Main.Spot) return;
             __result = true;
         }
     }
@@ -79,7 +73,7 @@ namespace BluesUnrestrictedCrafting {
     static class HearMode {
         static bool Prefix(string message) {
             if (!Main.IsSignal(message)) return true;
-            Mode heard = (Mode)(message.Length - 14);
+            Mode heard = message.Length == 16 ? Mode.Free : Mode.Off;
             if (heard != Main.Mode) {
                 Main.Mode = heard;
                 foreach (JointSlot slot in Resources.FindObjectsOfTypeAll<JointSlot>())   // slots switched off before this game heard

@@ -1,54 +1,52 @@
 # Blue's Unrestricted Crafting
 
-A MelonLoader mod for A Township Tale. Build "string" items by hand in the game: pieces in slots the game normally refuses,
-handles on handles, guards on guards, backpacks on weapons. No outside string tool, no spawn command.
+A MelonLoader mod for A Township Tale, for PC and Quest. Players the server owner allows can build "string" items by hand:
+any piece in any slot, handles on handles, guards on guards, backpacks on weapons. No outside string tool, no spawn command.
+Everyone else plays the normal game.
 
 ![Handles joined into a frame, with guards and pommels in every slot](screenshot.webp)
 
-## Modes
+## What allowed players can do
 
-The server owner picks one for everyone and one for admins. Players only install the file.
-
-| Mode | What players can do |
+| | |
 |---|---|
-| `Free` (admins by default) | Any piece in any slot, several at the same spot. Anything with slots (handles, backpacks, bows, shield handles) plugs into anything else. |
-| `OpenSlots` (everyone by default) | Only the pieces a slot is meant for, one per spot, but every spot at once: side pieces on both ends of a straight handle, big guards on both ends of a short handle. |
-| `Off` | The normal game. |
-
-## How to build
-
-- **A piece onto a slot:** hold what you are building in one hand and the piece in the other, bring the piece to a glowing slot, let go.
-- **One slotted thing into another (Free):** hold one in each hand. The bare one (nothing on it yet) plugs in by a fixed spot: a handle by one end, a backpack by its buckle. Let go of either hand.
-- **Backpacks and pouches** also work on the bag machine.
+| Any piece, any slot | Blades, guards, pommels and side pieces go in any slot, and every slot can be used, even several at one spot. |
+| Slotted things plug in | Anything with slots (handles, sticks, backpacks, pouches, bows, arrow shafts, shield handles) plugs into anything else. |
+| Either hand | With two things in your hands, the bare one (nothing on it yet) plugs in, and letting go of either hand attaches it. |
+| Bags from the hand | Backpacks and pouches attach from the hand, not only on the bag machine. |
 
 Two finished builds held together never fuse. There is no way to take things apart again.
 
 ## Install
 
-1. Put `BluesUnrestrictedCrafting.dll` in the server's `Mods` folder and in every PC player's `Mods` folder. Quest players (Modding Tavern's patched game) put `BluesUnrestrictedCrafting.Quest.dll` in the headset's `Mods` folder instead.
-2. Start the server once. It writes `UserData\BluesUnrestrictedCrafting.cfg`.
-3. Edit that file:
-
-| Setting | Default | |
+| | File | Where |
 |---|---|---|
-| `Mode` | `"OpenSlots"` | Everyone's mode. Restart to change. |
-| `AdminMode` | `"Free"` | The mode of the players in `Admins`. Restart to change. |
-| `Admins` | `""` | Player names, comma separated, any capitals, e.g. `"Blue_XD, Friend"`. Takes effect within a few seconds, no restart. |
+| Server | `BluesUnrestrictedCrafting.dll` | the server's `Mods` folder |
+| PC players | `BluesUnrestrictedCrafting.dll` | the game's `Mods` folder |
+| Quest players | `BluesUnrestrictedCrafting.Quest.dll` | the headset's `Mods` folder (Modding Tavern's patched game) |
 
-Or from the server console (TavernLauncher's Server window, or a remote console with the server's console token):
+Both files are on the [Releases](../../releases) page. A player without the mod can still join and plays the normal game.
+
+## Who may build without limits
+
+On the server's console (TavernLauncher's Server window, or a remote console with the server's console token):
 
 | Command | Does |
 |---|---|
-| `unrestricted` | Lists who has the admin mode. |
-| `unrestricted give <name>` | Gives a player the admin mode. |
-| `unrestricted take <name>` | Takes it away. |
+| `unrestricted` | Lists who may. |
+| `unrestricted give <name>` | Lets a player build without limits. Their game is told within a second. |
+| `unrestricted take <name>` | Puts them back on the normal game. |
+
+The list is the `Admins` line of the server's `UserData\BluesUnrestrictedCrafting.cfg` (names, comma separated, any capitals).
+Editing it by hand works too, and takes effect within a few seconds.
 
 ## Good to know
 
 | | |
 |---|---|
-| Who decides | The server checks every attach. A player's game only decides which slots glow. |
-| Players without the mod | Can join and play. They cannot build new combinations but see most of them; a slotted thing plugged into another and a second big guard on a short handle look loose to them. |
-| Saving | Built items save like any crafted item and survive a mode change. With the mod removed from the server, slotted things plugged into each other come apart on load. |
-| Looks | In Free a piece in a slot not made for it sits however that slot points, and pieces can overlap. |
-| Server log | One line per attach request. |
+| Who decides | The server checks every attach against the player who asked. A tampered game gains nothing. |
+| Players without the mod | See most builds; one slotted thing plugged into another, and a second big guard on a short handle, look loose to them. |
+| Saving | Built items save like any crafted item. With the mod removed from the server, slotted things plugged into each other come apart on load. |
+| Looks | A piece in a slot not made for it sits however that slot points, and pieces can overlap. |
+| Server log | One line per attach request: who, which piece, which slot. |
+| Renamed | This was Blue's In-Game String Tool. Remove `BluesInGameStringTool.dll` when you install this; the server copies its settings over once. |
