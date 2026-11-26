@@ -35,6 +35,14 @@ Two finished builds held together never fuse. There is no way to take things apa
 | `AdminMode` | `"Free"` | The mode of the players in `Admins`. Restart to change. |
 | `Admins` | `""` | Player names, comma separated, any capitals, e.g. `"Blue_XD, Friend"`. Takes effect within a few seconds, no restart. |
 
+Or from the server console (TavernLauncher's Server window, or a remote console with the server's console token):
+
+| Command | Does |
+|---|---|
+| `stringtool` | Lists who has the admin mode. |
+| `stringtool give <name>` | Gives a player the admin mode. |
+| `stringtool take <name>` | Takes it away. |
+
 ## Good to know
 
 | | |

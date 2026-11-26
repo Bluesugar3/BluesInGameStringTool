@@ -10,7 +10,7 @@ using MelonLoader;
 using MelonLoader.Utils;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(BluesInGameStringTool.Main), "Blue's In-Game String Tool", "0.2.1", "Blue")]
+[assembly: MelonInfo(typeof(BluesInGameStringTool.Main), "Blue's In-Game String Tool", "0.3.0", "Blue")]
 [assembly: MelonGame("Alta", "A Township Tale")]
 
 // Lets players hand-build what normally needs a spawn string, by changing the answers to the game's own checks:
@@ -35,7 +35,11 @@ namespace BluesInGameStringTool {
 
         public override void OnInitializeMelon() {
             Log = LoggerInstance;
-            if (Server) Rules.Load();
+            if (Server) {
+                Rules.Load();
+                try { Alta.Console.CommandService.CommandCollection.ProcessModule(typeof(Commands), typeof(Commands).Assembly); }
+                catch (Exception e) { Log.Warning($"the stringtool console commands could not be added: {e.Message}"); }
+            }
             Log.Msg($"{(Server ? $"server, everyone {Rules.Everyone}, admins {Rules.Admins}" : "game, the server sets the mode")}; {HarmonyInstance.GetPatchedMethods().Count()} game methods patched");
         }
 
@@ -252,6 +256,21 @@ namespace BluesInGameStringTool {
 
         internal static Mode For(Player p) => names.Contains(p.UserInfo?.Username ?? "") ? Admins : Everyone;
 
+        internal static IEnumerable<string> Listed => names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
+
+        // The console's give and take: the same list, written back to the file (players are told within a second).
+        internal static string Set(string name, bool admin) {
+            name = name.Trim().Trim('"');
+            if (name.Length == 0 || name.Contains(',')) return "Give a player name: stringtool give <name> / stringtool take <name>";
+            if (admin == names.Contains(name)) return $"{name} {(admin ? "already has" : "does not have")} {Admins}.";
+            var next = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            if (admin) next.Add(name); else next.Remove(name);
+            adminList.Value = string.Join(", ", next.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+            file.SaveToFile(false);
+            Names();
+            return $"{name} {(admin ? "now has" : "no longer has")} {Admins} (everyone else: {Everyone}).";
+        }
+
         internal static void Asked(CraftingPart part, IPlayer player) {
             if (player == null) return;
             asker.Remove(part);
@@ -281,4 +300,18 @@ namespace BluesInGameStringTool {
 
     [HarmonyPatch(typeof(ConfirmationCraftingPart), "SyncAttemptCraft")]
     static class AskedToNail { static void Prefix(CraftingPart __instance, IPlayer player) => Rules.Asked(__instance, player); }
+
+    // Server console (the TavernLauncher Server window's Console, or the remote console with the owner's token): TavernLib switches the
+    // game's in-game console off and has no permission list, so this is where admins are given.
+    [Alta.Console.PlayOnly, Alta.Console.ServerOnly, Alta.Console.Module("stringtool", "Blue's In-Game String Tool: who has the admin mode, give, take")]
+    static class Commands {
+        [Alta.Console.Command(null, "Who has the admin mode")]
+        static string Status() => $"Everyone: {Rules.Everyone}. Admins ({Rules.Admins}): {(Rules.Listed.Any() ? string.Join(", ", Rules.Listed) : "nobody")}.";
+
+        [Alta.Console.Command("give", "Gives a player the admin mode: stringtool give <name>")]
+        static string Give(string name = "") => Rules.Set(name, true);
+
+        [Alta.Console.Command("take", "Takes the admin mode from a player: stringtool take <name>")]
+        static string Take(string name = "") => Rules.Set(name, false);
+    }
 }
